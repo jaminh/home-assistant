@@ -136,7 +136,7 @@ class VoIPDevices:
             fw_version = None
 
         dev_reg = dr.async_get(self.hass)
-        voip_id = call_info.caller_ip
+        voip_id = call_info.caller_uri if call_info.caller_uri else call_info.caller_ip
         voip_device = self.devices.get(voip_id)
 
         if voip_device is not None:
