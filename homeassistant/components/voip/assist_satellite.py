@@ -18,6 +18,7 @@ from voip_utils.sip import SipEndpoint
 
 from homeassistant.components import assist_satellite, tts
 from homeassistant.components.assist_pipeline import PipelineEvent, PipelineEventType
+from homeassistant.components.assist_pipeline.pipeline import PipelineRunValidationError
 from homeassistant.components.assist_satellite import (
     AssistSatelliteConfiguration,
     AssistSatelliteEntity,
@@ -299,6 +300,13 @@ class VoipAssistSatellite(VoIPEntity, AssistSatelliteEntity, RtpDatagramProtocol
 
             await self._pipeline_task_queue.put(self._run_pipeline())
 
+        except PipelineRunValidationError:
+            _LOGGER.exception("Pipeline run validation error")
+            if self.voip_device.current_call is not None:
+                self.hass.data[DOMAIN].protocol.hang_up(self.voip_device.current_call)
+            self.disconnect()  # caller hung up
+            self._clear_pipeline_task_queue()
+            self._tts_done.set()
         except TimeoutError:
             if self.voip_device.current_call is not None:
                 self.hass.data[DOMAIN].protocol.hang_up(self.voip_device.current_call)
@@ -308,11 +316,7 @@ class VoipAssistSatellite(VoIPEntity, AssistSatelliteEntity, RtpDatagramProtocol
             _LOGGER.debug("Pipeline task cancelled")
             # If the pipeline got cancelled wait a little longer for it to finish,
             # then restart it
-            try:
-                async with asyncio.timeout(3.0):
-                    await accept_pipeline_task
-            except TimeoutError:
-                _LOGGER.debug("Timed out waiting for accept pipeline task")
+            await asyncio.sleep(2)
             if self._pipeline_task_queue.empty():
                 await self._pipeline_task_queue.put(self._run_pipeline())
         finally:
